@@ -41,6 +41,13 @@ module Lightning.Protocol.BOLT9 (
   , set
   , clear
   , member
+
+    -- * Known features
+  , Feature(..)
+  , featureByBit
+  , featureByName
+  , knownFeatures
   ) where
 
+import Lightning.Protocol.BOLT9.Features
 import Lightning.Protocol.BOLT9.Types as FV
