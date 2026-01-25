@@ -61,8 +61,16 @@ module Lightning.Protocol.BOLT9 (
   , setFeature
   , hasFeature
   , listFeatures
+
+    -- * Validation
+  , ValidationError(..)
+  , validateLocal
+  , validateRemote
+  , highestSetBit
+  , Validate.setBits
   ) where
 
 import Lightning.Protocol.BOLT9.Codec as Codec
 import Lightning.Protocol.BOLT9.Features
 import Lightning.Protocol.BOLT9.Types as FV
+import Lightning.Protocol.BOLT9.Validate as Validate
