@@ -22,6 +22,7 @@ module Lightning.Protocol.BOLT9.Codec (
     -- * Feature operations
   , setFeature
   , hasFeature
+  , isFeatureSet
   , listFeatures
   ) where
 
@@ -30,6 +31,15 @@ import qualified Data.ByteString as BS
 import Data.Word (Word16)
 import Lightning.Protocol.BOLT9.Features
 import Lightning.Protocol.BOLT9.Types
+  ( FeatureLevel(..)
+  , FeatureVector
+  , bitIndex
+  , clear
+  , fromByteString
+  , member
+  , set
+  , unFeatureVector
+  )
 
 -- Parsing and rendering ------------------------------------------------------
 
@@ -76,63 +86,78 @@ testBit !idx = member (bitIndex idx)
 
 -- Feature operations ---------------------------------------------------------
 
--- | Set or clear a feature's bit.
+-- | Set a feature's bit at the given level.
 --
---   If the Bool is True, sets the required (even) bit.
---   If the Bool is False, sets the optional (odd) bit.
+--   'Required' sets the even bit, 'Optional' sets the odd bit.
 --
 --   >>> import Data.Maybe (fromJust)
 --   >>> let mpp = fromJust (featureByName "basic_mpp")
---   >>> setFeature mpp False empty  -- set optional bit (17)
+--   >>> setFeature mpp Optional empty  -- set optional bit (17)
 --   FeatureVector {unFeatureVector = "\STX"}
---   >>> setFeature mpp True empty   -- set required bit (16)
+--   >>> setFeature mpp Required empty  -- set required bit (16)
 --   FeatureVector {unFeatureVector = "\SOH"}
-setFeature :: Feature -> Bool -> FeatureVector -> FeatureVector
-setFeature !f !required = setBit targetBit
+setFeature :: Feature -> FeatureLevel -> FeatureVector -> FeatureVector
+setFeature !f !level = setBit targetBit
   where
     !baseBit   = featureBaseBit f
-    !targetBit = if required then baseBit else baseBit + 1
+    !targetBit = case level of
+      Required -> baseBit
+      Optional -> baseBit + 1
 {-# INLINE setFeature #-}
 
 -- | Check if a feature is set in the vector.
 --
 --   Returns:
 --
---   * @Just True@ if the required (even) bit is set
---   * @Just False@ if the optional (odd) bit is set (and required is not)
+--   * @Just Required@ if the required (even) bit is set
+--   * @Just Optional@ if the optional (odd) bit is set (and required is not)
 --   * @Nothing@ if neither bit is set
 --
 --   >>> import Data.Maybe (fromJust)
 --   >>> let mpp = fromJust (featureByName "basic_mpp")
---   >>> hasFeature mpp (setFeature mpp False empty)
---   Just False
---   >>> hasFeature mpp (setFeature mpp True empty)
---   Just True
+--   >>> hasFeature mpp (setFeature mpp Optional empty)
+--   Just Optional
+--   >>> hasFeature mpp (setFeature mpp Required empty)
+--   Just Required
 --   >>> hasFeature mpp empty
 --   Nothing
-hasFeature :: Feature -> FeatureVector -> Maybe Bool
+hasFeature :: Feature -> FeatureVector -> Maybe FeatureLevel
 hasFeature !f !fv
-  | testBit baseBit fv       = Just True   -- required
-  | testBit (baseBit + 1) fv = Just False  -- optional
+  | testBit baseBit fv       = Just Required
+  | testBit (baseBit + 1) fv = Just Optional
   | otherwise                = Nothing
   where
     !baseBit = featureBaseBit f
 {-# INLINE hasFeature #-}
 
+-- | Check if either bit of a feature is set in the vector.
+--
+--   >>> import Data.Maybe (fromJust)
+--   >>> let mpp = fromJust (featureByName "basic_mpp")
+--   >>> isFeatureSet mpp (setFeature mpp Optional empty)
+--   True
+--   >>> isFeatureSet mpp empty
+--   False
+isFeatureSet :: Feature -> FeatureVector -> Bool
+isFeatureSet !f !fv =
+  let !baseBit = featureBaseBit f
+  in  testBit baseBit fv || testBit (baseBit + 1) fv
+{-# INLINE isFeatureSet #-}
+
 -- | List all known features that are set in the vector.
 --
---   Returns pairs of (Feature, Bool) where the Bool indicates if the
---   required (even) bit is set (True) or the optional (odd) bit (False).
+--   Returns pairs of (Feature, FeatureLevel) indicating whether each
+--   feature is set as required or optional.
 --
 --   >>> import Data.Maybe (fromJust)
 --   >>> let mpp = fromJust (featureByName "basic_mpp")
 --   >>> let ps = fromJust (featureByName "payment_secret")
---   >>> let fv = setFeature mpp False (setFeature ps True empty)
---   >>> map (\(f, r) -> (featureName f, r)) (listFeatures fv)
---   [("payment_secret",True),("basic_mpp",False)]
-listFeatures :: FeatureVector -> [(Feature, Bool)]
+--   >>> let fv = setFeature mpp Optional (setFeature ps Required empty)
+--   >>> map (\(f, l) -> (featureName f, l)) (listFeatures fv)
+--   [("payment_secret",Required),("basic_mpp",Optional)]
+listFeatures :: FeatureVector -> [(Feature, FeatureLevel)]
 listFeatures !fv = foldr check [] knownFeatures
   where
     check !f !acc = case hasFeature f fv of
-      Just isReq -> (f, isReq) : acc
+      Just level -> (f, level) : acc
       Nothing    -> acc

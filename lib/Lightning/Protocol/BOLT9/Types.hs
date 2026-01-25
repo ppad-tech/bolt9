@@ -21,6 +21,9 @@ module Lightning.Protocol.BOLT9.Types (
   , unBitIndex
   , bitIndex
 
+    -- * Required/optional level
+  , FeatureLevel(..)
+
     -- * Required/optional bits
   , RequiredBit
   , unRequiredBit
@@ -92,6 +95,19 @@ channelParity ChanAnnOdd  = Just False  -- odd
 channelParity ChanAnnEven = Just True   -- even
 channelParity _           = Nothing
 {-# INLINE channelParity #-}
+
+-- FeatureLevel -------------------------------------------------------------
+
+-- | Whether a feature is set as required or optional.
+--
+-- Per BOLT #9, each feature has a pair of bits: the even bit indicates
+-- required (compulsory) support, the odd bit indicates optional support.
+data FeatureLevel
+  = Required  -- ^ The feature is required (even bit set)
+  | Optional  -- ^ The feature is optional (odd bit set)
+  deriving (Eq, Ord, Show, Generic)
+
+instance NFData FeatureLevel
 
 -- BitIndex -----------------------------------------------------------------
 

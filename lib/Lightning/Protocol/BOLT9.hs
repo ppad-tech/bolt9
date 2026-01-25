@@ -31,9 +31,9 @@
 --
 -- >>> import Lightning.Protocol.BOLT9
 -- >>> let Just mpp = featureByName "basic_mpp"
--- >>> let fv = setFeature mpp False empty  -- optional support
+-- >>> let fv = setFeature mpp Optional empty
 -- >>> hasFeature mpp fv
--- Just False
+-- Just Optional
 --
 -- Validate a feature vector for a specific context:
 --
@@ -43,7 +43,7 @@
 -- Fix by adding the dependency:
 --
 -- >>> let Just ps = featureByName "payment_secret"
--- >>> let fv' = setFeature ps False (setFeature mpp False empty)
+-- >>> let fv' = setFeature ps Optional (setFeature mpp Optional empty)
 -- >>> validateLocal Init fv'
 -- Right ()
 --
@@ -69,6 +69,10 @@ module Lightning.Protocol.BOLT9 (
   , BitIndex
   , unBitIndex
   , bitIndex
+
+    -- * Required/optional level
+    -- | Whether a feature is set as required or optional.
+  , FeatureLevel(..)
 
     -- * Required/optional bits
     -- | Type-safe wrappers ensuring correct parity.
@@ -114,6 +118,7 @@ module Lightning.Protocol.BOLT9 (
     -- | High-level operations using 'Feature' values.
   , setFeature
   , hasFeature
+  , isFeatureSet
   , listFeatures
 
     -- * Validation

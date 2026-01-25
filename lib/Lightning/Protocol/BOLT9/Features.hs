@@ -24,7 +24,10 @@ module Lightning.Protocol.BOLT9.Features (
   ) where
 
 import Control.DeepSeq (NFData)
-import Data.List (find)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IM
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import Data.Word (Word16)
 import GHC.Generics (Generic)
 import Lightning.Protocol.BOLT9.Types (Context(..))
@@ -90,8 +93,9 @@ knownFeatures = [
 --   Nothing
 featureByBit :: Word16 -> Maybe Feature
 featureByBit !bit =
-  let baseBit = bit - (bit `mod` 2)  -- round down to even
-  in  find (\f -> featureBaseBit f == baseBit) knownFeatures
+  let !baseBit = fromIntegral bit - (fromIntegral bit `mod` 2)
+  in  IM.lookup baseBit featuresByBit
+{-# INLINE featureByBit #-}
 
 -- | Look up a feature by its canonical name.
 --
@@ -100,4 +104,17 @@ featureByBit !bit =
 --   >>> featureByName "nonexistent"
 --   Nothing
 featureByName :: String -> Maybe Feature
-featureByName !name = find (\f -> featureName f == name) knownFeatures
+featureByName !name = M.lookup name featuresByName
+{-# INLINE featureByName #-}
+
+-- Lookup tables -------------------------------------------------------------
+
+-- | Features indexed by base bit (even bit number).
+featuresByBit :: IntMap Feature
+featuresByBit = IM.fromList
+  [(fromIntegral (featureBaseBit f), f) | f <- knownFeatures]
+
+-- | Features indexed by canonical name.
+featuresByName :: Map String Feature
+featuresByName = M.fromList
+  [(featureName f, f) | f <- knownFeatures]

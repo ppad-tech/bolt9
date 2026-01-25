@@ -31,7 +31,7 @@ import qualified Data.ByteString as BS
 import qualified Data.Bits as B
 import Data.Word (Word16)
 import GHC.Generics (Generic)
-import Lightning.Protocol.BOLT9.Codec (testBit)
+import Lightning.Protocol.BOLT9.Codec (isFeatureSet, testBit)
 import Lightning.Protocol.BOLT9.Features
 import Lightning.Protocol.BOLT9.Types
 
@@ -100,10 +100,10 @@ contextErrors :: Context -> FeatureVector -> [ValidationError]
 contextErrors !ctx !fv = foldr check [] knownFeatures
   where
     check !f !acc =
-      let !baseBit  = featureBaseBit f
-          !contexts = featureContexts f
-          !isSet    = testBit baseBit fv || testBit (baseBit + 1) fv
-      in  if isSet && not (null contexts) && not (contextAllowed ctx contexts)
+      let !contexts = featureContexts f
+      in  if   isFeatureSet f fv
+            && not (null contexts)
+            && not (contextAllowed ctx contexts)
           then ContextNotAllowed (featureName f) ctx : acc
           else acc
 
@@ -118,11 +118,9 @@ dependencyErrors :: FeatureVector -> [ValidationError]
 dependencyErrors !fv = foldr check [] knownFeatures
   where
     check !f !acc =
-      let !baseBit = featureBaseBit f
-          !isSet   = testBit baseBit fv || testBit (baseBit + 1) fv
-      in  if isSet
-          then checkDeps f (featureDependencies f) ++ acc
-          else acc
+      if   isFeatureSet f fv
+      then checkDeps f (featureDependencies f) ++ acc
+      else acc
 
     checkDeps !f = foldr (checkOneDep f) []
 
@@ -130,10 +128,9 @@ dependencyErrors !fv = foldr check [] knownFeatures
       case featureByName depName of
         Nothing   -> acc  -- unknown dep, skip
         Just !dep ->
-          let !depBase = featureBaseBit dep
-          in  if testBit depBase fv || testBit (depBase + 1) fv
-              then acc
-              else MissingDependency (featureName f) depName : acc
+          if   isFeatureSet dep fv
+          then acc
+          else MissingDependency (featureName f) depName : acc
 
 -- | Check for parity errors in C- and C+ contexts.
 parityErrors :: Context -> FeatureVector -> [ValidationError]
@@ -207,18 +204,10 @@ findHighestBit !bs = go 0
           in  if byte == 0
               then go (i + 1)
               else
-                let !bytePos   = len - 1 - i
-                    !highBit   = 7 - countLeadingZeros byte
-                    !bitIdx    = fromIntegral bytePos * 8 + fromIntegral highBit
+                let !bytePos = len - 1 - i
+                    !highBit = 7 - B.countLeadingZeros byte
+                    !bitIdx  = fromIntegral bytePos * 8 + fromIntegral highBit
                 in  Just bitIdx
-
-    countLeadingZeros :: B.Bits a => a -> Int
-    countLeadingZeros !b = go' 7
-      where
-        go' !n
-          | n < 0           = 8
-          | B.testBit b n   = 7 - n
-          | otherwise       = go' (n - 1)
 
 -- | Collect all set bits in a feature vector.
 --
