@@ -47,7 +47,22 @@ module Lightning.Protocol.BOLT9 (
   , featureByBit
   , featureByName
   , knownFeatures
+
+    -- * Parsing and rendering
+  , parse
+  , render
+
+    -- * Codec bit operations
+  , Codec.setBit
+  , Codec.clearBit
+  , Codec.testBit
+
+    -- * Codec feature operations
+  , setFeature
+  , hasFeature
+  , listFeatures
   ) where
 
+import Lightning.Protocol.BOLT9.Codec as Codec
 import Lightning.Protocol.BOLT9.Features
 import Lightning.Protocol.BOLT9.Types as FV
