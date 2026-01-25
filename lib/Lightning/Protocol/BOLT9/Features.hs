@@ -81,11 +81,23 @@ knownFeatures = [
 -- | Look up a feature by bit number.
 --
 --   Accepts either the even (compulsory) or odd (optional) bit of the pair.
+--
+--   >>> fmap featureName (featureByBit 16)
+--   Just "basic_mpp"
+--   >>> fmap featureName (featureByBit 17)  -- odd bit also works
+--   Just "basic_mpp"
+--   >>> featureByBit 999
+--   Nothing
 featureByBit :: Word16 -> Maybe Feature
 featureByBit !bit =
   let baseBit = bit - (bit `mod` 2)  -- round down to even
   in  find (\f -> featureBaseBit f == baseBit) knownFeatures
 
 -- | Look up a feature by its canonical name.
+--
+--   >>> fmap featureBaseBit (featureByName "basic_mpp")
+--   Just 16
+--   >>> featureByName "nonexistent"
+--   Nothing
 featureByName :: String -> Maybe Feature
 featureByName !name = find (\f -> featureName f == name) knownFeatures

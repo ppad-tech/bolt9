@@ -66,6 +66,15 @@ instance NFData ValidationError
 --   * All set features are valid for the given context
 --   * All dependencies of set features are also set
 --   * C- context forces odd bits only, C+ forces even bits only
+--
+--   >>> import Data.Maybe (fromJust)
+--   >>> import Lightning.Protocol.BOLT9.Codec (setFeature)
+--   >>> let mpp = fromJust (featureByName "basic_mpp")
+--   >>> let ps = fromJust (featureByName "payment_secret")
+--   >>> validateLocal Init (setFeature mpp False empty)
+--   Left [MissingDependency "basic_mpp" "payment_secret"]
+--   >>> validateLocal Init (setFeature mpp False (setFeature ps False empty))
+--   Right ()
 validateLocal :: Context -> FeatureVector -> Either [ValidationError] ()
 validateLocal !ctx !fv =
   let errs = bothBitsErrors fv
@@ -148,6 +157,12 @@ parityErrors !ctx !fv = case channelParity ctx of
 --   * Unknown even (required) bits are errors
 --   * If both bits of a pair are set, treat as required (not an error)
 --   * Context restrictions still apply for known features
+--
+--   >>> import Lightning.Protocol.BOLT9.Codec (setBit)
+--   >>> validateRemote Init (setBit 999 empty)  -- unknown odd bit: ok
+--   Right ()
+--   >>> validateRemote Init (setBit 998 empty)  -- unknown even bit: error
+--   Left [UnknownRequiredBit 998]
 validateRemote :: Context -> FeatureVector -> Either [ValidationError] ()
 validateRemote !ctx !fv =
   let errs = unknownRequiredErrors fv

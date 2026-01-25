@@ -49,16 +49,27 @@ render = BS.dropWhile (== 0) . unFeatureVector
 -- Bit operations -------------------------------------------------------------
 
 -- | Set a bit by raw index.
+--
+--   >>> setBit 17 empty
+--   FeatureVector {unFeatureVector = "\STX"}
 setBit :: Word16 -> FeatureVector -> FeatureVector
 setBit !idx = set (bitIndex idx)
 {-# INLINE setBit #-}
 
 -- | Clear a bit by raw index.
+--
+--   >>> clearBit 17 (setBit 17 empty)
+--   FeatureVector {unFeatureVector = ""}
 clearBit :: Word16 -> FeatureVector -> FeatureVector
 clearBit !idx = clear (bitIndex idx)
 {-# INLINE clearBit #-}
 
 -- | Test if a bit is set.
+--
+--   >>> testBit 17 (setBit 17 empty)
+--   True
+--   >>> testBit 16 (setBit 17 empty)
+--   False
 testBit :: Word16 -> FeatureVector -> Bool
 testBit !idx = member (bitIndex idx)
 {-# INLINE testBit #-}
@@ -69,6 +80,13 @@ testBit !idx = member (bitIndex idx)
 --
 --   If the Bool is True, sets the required (even) bit.
 --   If the Bool is False, sets the optional (odd) bit.
+--
+--   >>> import Data.Maybe (fromJust)
+--   >>> let mpp = fromJust (featureByName "basic_mpp")
+--   >>> setFeature mpp False empty  -- set optional bit (17)
+--   FeatureVector {unFeatureVector = "\STX"}
+--   >>> setFeature mpp True empty   -- set required bit (16)
+--   FeatureVector {unFeatureVector = "\SOH"}
 setFeature :: Feature -> Bool -> FeatureVector -> FeatureVector
 setFeature !f !required = setBit targetBit
   where
@@ -83,6 +101,15 @@ setFeature !f !required = setBit targetBit
 --   * @Just True@ if the required (even) bit is set
 --   * @Just False@ if the optional (odd) bit is set (and required is not)
 --   * @Nothing@ if neither bit is set
+--
+--   >>> import Data.Maybe (fromJust)
+--   >>> let mpp = fromJust (featureByName "basic_mpp")
+--   >>> hasFeature mpp (setFeature mpp False empty)
+--   Just False
+--   >>> hasFeature mpp (setFeature mpp True empty)
+--   Just True
+--   >>> hasFeature mpp empty
+--   Nothing
 hasFeature :: Feature -> FeatureVector -> Maybe Bool
 hasFeature !f !fv
   | testBit baseBit fv       = Just True   -- required
@@ -96,6 +123,13 @@ hasFeature !f !fv
 --
 --   Returns pairs of (Feature, Bool) where the Bool indicates if the
 --   required (even) bit is set (True) or the optional (odd) bit (False).
+--
+--   >>> import Data.Maybe (fromJust)
+--   >>> let mpp = fromJust (featureByName "basic_mpp")
+--   >>> let ps = fromJust (featureByName "payment_secret")
+--   >>> let fv = setFeature mpp False (setFeature ps True empty)
+--   >>> map (\(f, r) -> (featureName f, r)) (listFeatures fv)
+--   [("payment_secret",True),("basic_mpp",False)]
 listFeatures :: FeatureVector -> [(Feature, Bool)]
 listFeatures !fv = foldr check [] knownFeatures
   where

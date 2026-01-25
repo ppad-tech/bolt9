@@ -118,7 +118,12 @@ newtype RequiredBit = RequiredBit { unRequiredBit :: Word16 }
 instance NFData RequiredBit
 
 -- | Smart constructor for 'RequiredBit'. Returns 'Nothing' if the bit
--- index is odd.
+--   index is odd.
+--
+--   >>> requiredBit 16
+--   Just (RequiredBit {unRequiredBit = 16})
+--   >>> requiredBit 17
+--   Nothing
 requiredBit :: Word16 -> Maybe RequiredBit
 requiredBit !w
   | w B..&. 1 == 0 = Just (RequiredBit w)
@@ -139,7 +144,12 @@ newtype OptionalBit = OptionalBit { unOptionalBit :: Word16 }
 instance NFData OptionalBit
 
 -- | Smart constructor for 'OptionalBit'. Returns 'Nothing' if the bit
--- index is even.
+--   index is even.
+--
+--   >>> optionalBit 17
+--   Just (OptionalBit {unOptionalBit = 17})
+--   >>> optionalBit 16
+--   Nothing
 optionalBit :: Word16 -> Maybe OptionalBit
 optionalBit !w
   | w B..&. 1 == 1 = Just (OptionalBit w)
@@ -164,6 +174,9 @@ newtype FeatureVector = FeatureVector { unFeatureVector :: ByteString }
 instance NFData FeatureVector
 
 -- | The empty feature vector (no features set).
+--
+--   >>> empty
+--   FeatureVector {unFeatureVector = ""}
 empty :: FeatureVector
 empty = FeatureVector BS.empty
 {-# INLINE empty #-}
@@ -174,6 +187,11 @@ fromByteString = FeatureVector
 {-# INLINE fromByteString #-}
 
 -- | Set a bit in the feature vector.
+--
+--   >>> set (bitIndex 0) empty
+--   FeatureVector {unFeatureVector = "\SOH"}
+--   >>> set (bitIndex 8) empty
+--   FeatureVector {unFeatureVector = "\SOH\NUL"}
 set :: BitIndex -> FeatureVector -> FeatureVector
 set (BitIndex idx) (FeatureVector bs) =
   let byteIdx    = fromIntegral idx `div` 8
@@ -211,6 +229,11 @@ clear (BitIndex idx) (FeatureVector bs)
 {-# INLINE clear #-}
 
 -- | Test if a bit is set in the feature vector.
+--
+--   >>> member (bitIndex 0) (set (bitIndex 0) empty)
+--   True
+--   >>> member (bitIndex 1) (set (bitIndex 0) empty)
+--   False
 member :: BitIndex -> FeatureVector -> Bool
 member (BitIndex idx) (FeatureVector bs)
   | BS.null bs = False
