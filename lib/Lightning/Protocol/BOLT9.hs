@@ -12,10 +12,35 @@
 -- [BOLT #9](https://github.com/lightning/bolts/blob/master/09-features.md).
 
 module Lightning.Protocol.BOLT9 (
-  -- * Feature flags
-  -- TODO
+    -- * Context
+    Context(..)
+  , isChannelContext
+  , channelParity
+
+    -- * Bit indices
+  , BitIndex
+  , unBitIndex
+  , bitIndex
+
+    -- * Required/optional bits
+  , RequiredBit
+  , unRequiredBit
+  , requiredBit
+  , requiredFromBitIndex
+
+  , OptionalBit
+  , unOptionalBit
+  , optionalBit
+  , optionalFromBitIndex
+
+    -- * Feature vectors
+  , FeatureVector
+  , unFeatureVector
+  , FV.empty
+  , fromByteString
+  , set
+  , clear
+  , member
   ) where
 
-import Control.DeepSeq (NFData)
-import GHC.Generics (Generic)
-
+import Lightning.Protocol.BOLT9.Types as FV
