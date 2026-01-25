@@ -25,6 +25,7 @@ library
       -Wall
   exposed-modules:
       Lightning.Protocol.BOLT9
+      Lightning.Protocol.BOLT9.Features
       Lightning.Protocol.BOLT9.Types
   build-depends:
       base >= 4.9 && < 5
