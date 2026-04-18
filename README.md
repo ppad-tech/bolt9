@@ -1,5 +1,9 @@
 # ppad-bolt9
 
+[![](https://img.shields.io/hackage/v/ppad-bolt9?color=blue)](https://hackage.haskell.org/package/ppad-bolt9)
+![](https://img.shields.io/badge/license-MIT-brightgreen)
+[![](https://img.shields.io/badge/haddock-bolt9-lightblue)](https://docs.ppad.tech/bolt9)
+
 A Haskell implementation of Lightning Network feature flags (BOLT #9),
 providing type-safe feature vectors with validation and wire format
 encoding.
@@ -83,9 +87,7 @@ $ cabal bench
 
 ## Security
 
-This library targets safe, validated handling of Lightning BOLT #9
-feature flags. If you discover any vulnerabilities, please disclose
-them via security@ppad.tech.
+This is a pre-release library and makes no claims about security whatsoever.
 
 ## Development
 
