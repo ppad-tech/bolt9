@@ -15,6 +15,11 @@ module Lightning.Protocol.BOLT9.Features (
     -- * Feature
     Feature(..)
 
+    -- * Known feature
+  , KnownFeature(..)
+  , knownFeatureByBit
+  , knownFeatureByName
+
     -- * Lookup
   , featureByBit
   , featureByName
@@ -49,6 +54,42 @@ data Feature = Feature {
   deriving (Eq, Show, Generic)
 
 instance NFData Feature
+
+-- | A feature that is known to be in the BOLT #9 specification.
+--
+-- Constructed via 'knownFeatureByBit' or 'knownFeatureByName',
+-- which validate that the feature exists in the known table.
+newtype KnownFeature = KnownFeature {
+    unKnownFeature :: Feature
+    -- ^ Extract the underlying 'Feature'.
+  }
+  deriving (Eq, Show, Generic)
+
+instance NFData KnownFeature
+
+-- | Look up a known feature by bit number.
+--
+--   Accepts either the even (compulsory) or odd (optional) bit.
+--
+--   >>> fmap (featureName . unKnownFeature) (knownFeatureByBit 16)
+--   Just "basic_mpp"
+--   >>> knownFeatureByBit 999
+--   Nothing
+knownFeatureByBit :: Word16 -> Maybe KnownFeature
+knownFeatureByBit !bit = fmap KnownFeature (featureByBit bit)
+{-# INLINE knownFeatureByBit #-}
+
+-- | Look up a known feature by its canonical name.
+--
+--   >>> fmap (featureName . unKnownFeature)
+--   ...       (knownFeatureByName "basic_mpp")
+--   Just "basic_mpp"
+--   >>> knownFeatureByName "nonexistent"
+--   Nothing
+knownFeatureByName :: String -> Maybe KnownFeature
+knownFeatureByName !name =
+  fmap KnownFeature (featureByName name)
+{-# INLINE knownFeatureByName #-}
 
 -- | The complete table of known features from BOLT #9.
 knownFeatures :: [Feature]

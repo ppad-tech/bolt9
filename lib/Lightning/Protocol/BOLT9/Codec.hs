@@ -21,6 +21,7 @@ module Lightning.Protocol.BOLT9.Codec (
 
     -- * Feature operations
   , setFeature
+  , setFeatureWithDeps
   , hasFeature
   , isFeatureSet
   , listFeatures
@@ -104,6 +105,30 @@ setFeature !f !level = setBit targetBit
       Required -> baseBit
       Optional -> baseBit + 1
 {-# INLINE setFeature #-}
+
+-- | Set a feature and all its transitive dependencies.
+--
+--   Dependencies are set at the same level as the feature itself.
+--   Unknown dependencies (not in the known features table) are
+--   silently skipped.
+--
+--   >>> import Data.Maybe (fromJust)
+--   >>> let mpp = fromJust (featureByName "basic_mpp")
+--   >>> let fv = setFeatureWithDeps mpp Optional empty
+--   >>> isFeatureSet mpp fv
+--   True
+--   >>> let Just ps = featureByName "payment_secret"
+--   >>> isFeatureSet ps fv  -- dependency auto-set
+--   True
+setFeatureWithDeps
+  :: Feature -> FeatureLevel -> FeatureVector -> FeatureVector
+setFeatureWithDeps !f !level !fv =
+  let !fv' = setFeature f level fv
+  in  foldr setDep fv' (featureDependencies f)
+  where
+    setDep !depName !acc = case featureByName depName of
+      Nothing  -> acc
+      Just dep -> setFeatureWithDeps dep level acc
 
 -- | Check if a feature is set in the vector.
 --

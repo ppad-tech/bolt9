@@ -4,6 +4,7 @@
 module Main where
 
 import qualified Data.ByteString as BS
+import Data.Either (isLeft, isRight)
 import Data.Maybe (isJust, isNothing)
 import Data.Word (Word16)
 import Lightning.Protocol.BOLT9
@@ -20,6 +21,10 @@ tests = testGroup "ppad-bolt9" [
   , bitParityTests
   , featureVectorTests
   , validationTests
+  , knownFeatureTests
+  , setFeatureWithDepsTests
+  , setFeatureForContextTests
+  , validateNoBothBitsTests
   , propertyTests
   ]
 
@@ -231,6 +236,190 @@ isContextNotAllowed _ = False
 isUnknownRequiredBit :: ValidationError -> Bool
 isUnknownRequiredBit (UnknownRequiredBit _) = True
 isUnknownRequiredBit _ = False
+
+-- KnownFeature tests -----------------------------------------------------------
+
+knownFeatureTests :: TestTree
+knownFeatureTests = testGroup "KnownFeature" [
+    testCase "knownFeatureByBit finds known feature" $
+      case knownFeatureByBit 16 of
+        Nothing -> assertFailure "expected basic_mpp"
+        Just kf ->
+          featureName (unKnownFeature kf) @?= "basic_mpp"
+
+  , testCase "knownFeatureByBit works for odd bit" $
+      case knownFeatureByBit 17 of
+        Nothing -> assertFailure "expected basic_mpp"
+        Just kf ->
+          featureName (unKnownFeature kf) @?= "basic_mpp"
+
+  , testCase "knownFeatureByBit returns Nothing for unknown" $
+      knownFeatureByBit 999 @?= Nothing
+
+  , testCase "knownFeatureByName finds known feature" $
+      case knownFeatureByName "payment_secret" of
+        Nothing -> assertFailure "expected payment_secret"
+        Just kf ->
+          featureBaseBit (unKnownFeature kf) @?= 14
+
+  , testCase "knownFeatureByName returns Nothing for unknown" $
+      knownFeatureByName "nonexistent" @?= Nothing
+  ]
+
+-- setFeatureWithDeps tests -----------------------------------------------------
+
+setFeatureWithDepsTests :: TestTree
+setFeatureWithDepsTests = testGroup "setFeatureWithDeps" [
+    testCase "sets feature and its dependency" $ do
+      case featureByName "basic_mpp" of
+        Nothing -> assertFailure "basic_mpp not found"
+        Just mpp -> do
+          let fv = setFeatureWithDeps mpp Optional empty
+          isFeatureSet mpp fv @?= True
+          -- payment_secret should also be set
+          case featureByName "payment_secret" of
+            Nothing ->
+              assertFailure "payment_secret not found"
+            Just ps -> isFeatureSet ps fv @?= True
+
+  , testCase "sets transitive dependencies" $ do
+      -- option_zeroconf depends on option_scid_alias
+      case featureByName "option_zeroconf" of
+        Nothing ->
+          assertFailure "option_zeroconf not found"
+        Just zc -> do
+          let fv = setFeatureWithDeps zc Required empty
+          isFeatureSet zc fv @?= True
+          case featureByName "option_scid_alias" of
+            Nothing ->
+              assertFailure "option_scid_alias not found"
+            Just sa -> isFeatureSet sa fv @?= True
+
+  , testCase "feature without deps sets only itself" $ do
+      case featureByName "payment_secret" of
+        Nothing ->
+          assertFailure "payment_secret not found"
+        Just ps -> do
+          let fv = setFeatureWithDeps ps Optional empty
+          isFeatureSet ps fv @?= True
+          -- no other features should be set
+          let others = filter
+                (\(f, _) -> featureName f /= "payment_secret")
+                (listFeatures fv)
+          null others @?= True
+
+  , testCase "passes validateLocal after setFeatureWithDeps" $ do
+      case featureByName "basic_mpp" of
+        Nothing -> assertFailure "basic_mpp not found"
+        Just mpp -> do
+          let fv = setFeatureWithDeps mpp Optional empty
+          validateLocal Init fv @?= Right ()
+  ]
+
+-- setFeatureForContext tests ---------------------------------------------------
+
+setFeatureForContextTests :: TestTree
+setFeatureForContextTests = testGroup "setFeatureForContext" [
+    testCase "allows feature in valid context" $ do
+      case featureByName "option_payment_metadata" of
+        Nothing ->
+          assertFailure "option_payment_metadata not found"
+        Just pm ->
+          isRight
+            (setFeatureForContext Invoice pm Optional empty)
+            @?= True
+
+  , testCase "rejects feature in wrong context" $ do
+      case featureByName "option_payment_metadata" of
+        Nothing ->
+          assertFailure "option_payment_metadata not found"
+        Just pm ->
+          case setFeatureForContext Init pm Optional empty of
+            Right _ -> assertFailure "expected error"
+            Left err -> isContextNotAllowed err @?= True
+
+  , testCase "allows feature with empty context list" $ do
+      -- payment_secret has empty context list (all allowed)
+      case featureByName "payment_secret" of
+        Nothing ->
+          assertFailure "payment_secret not found"
+        Just ps ->
+          isRight
+            (setFeatureForContext Init ps Optional empty)
+            @?= True
+
+  , testCase "rejects Required in ChanAnnOdd context" $ do
+      case featureByName "payment_secret" of
+        Nothing ->
+          assertFailure "payment_secret not found"
+        Just ps ->
+          case setFeatureForContext
+                 ChanAnnOdd ps Required empty of
+            Right _ -> assertFailure "expected parity error"
+            Left err -> isInvalidParity err @?= True
+
+  , testCase "allows Optional in ChanAnnOdd context" $ do
+      case featureByName "payment_secret" of
+        Nothing ->
+          assertFailure "payment_secret not found"
+        Just ps ->
+          isRight
+            (setFeatureForContext
+               ChanAnnOdd ps Optional empty)
+            @?= True
+
+  , testCase "rejects Optional in ChanAnnEven context" $ do
+      case featureByName "payment_secret" of
+        Nothing ->
+          assertFailure "payment_secret not found"
+        Just ps ->
+          case setFeatureForContext
+                 ChanAnnEven ps Optional empty of
+            Right _ -> assertFailure "expected parity error"
+            Left err -> isInvalidParity err @?= True
+
+  , testCase "allows Required in ChanAnnEven context" $ do
+      case featureByName "payment_secret" of
+        Nothing ->
+          assertFailure "payment_secret not found"
+        Just ps ->
+          isRight
+            (setFeatureForContext
+               ChanAnnEven ps Required empty)
+            @?= True
+  ]
+
+-- validateNoBothBits tests -----------------------------------------------------
+
+validateNoBothBitsTests :: TestTree
+validateNoBothBitsTests = testGroup "validateNoBothBits" [
+    testCase "passes for empty vector" $
+      isRight (validateNoBothBits empty) @?= True
+
+  , testCase "passes when only one bit of pair is set" $ do
+      case featureByName "payment_secret" of
+        Nothing ->
+          assertFailure "payment_secret not found"
+        Just ps -> do
+          let fv = setFeature ps Optional empty
+          isRight (validateNoBothBits fv) @?= True
+
+  , testCase "fails when both bits of pair are set" $ do
+      let fv = setBit 15 (setBit 14 empty)
+      case validateNoBothBits fv of
+        Right _ -> assertFailure "expected BothBitsSet"
+        Left err -> isBothBitsSet err @?= True
+
+  , testCase "returns first error found" $ do
+      -- set both bits for two features
+      let fv = setBit 15 (setBit 14
+             (setBit 17 (setBit 16 empty)))
+      isLeft (validateNoBothBits fv) @?= True
+  ]
+
+isInvalidParity :: ValidationError -> Bool
+isInvalidParity (InvalidParity _ _) = True
+isInvalidParity _ = False
 
 -- Property tests --------------------------------------------------------------
 
