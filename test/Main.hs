@@ -468,7 +468,50 @@ propertyTests = testGroup "Properties" [
 
   , testProperty "optionalBit only succeeds for odd" $
       \(n :: Word16) -> isJust (optionalBit n) === (n `mod` 2 == 1)
+
+  , testProperty "setFeature then hasFeature" $
+      forAll genFeatureAndLevel $ \(f, lvl) ->
+        let fv = setFeature f lvl empty
+        in  hasFeature f fv == Just lvl
+
+  , testProperty
+      "setFeatureWithDeps passes validateLocal" $
+      forAll genInitFeatureAndLevel $ \(f, lvl) ->
+        let fv = setFeatureWithDeps f lvl empty
+        in  isRight (validateLocal Init fv)
+
+  , testProperty "parse . render is identity" $
+      \bs ->
+        let stripped = BS.dropWhile (== 0) (BS.pack bs)
+            fv = parse stripped
+        in  parse (render fv) == fv
+
+  , testProperty
+      "setFeature never sets both bits" $
+      forAll genFeatureAndLevel $ \(f, lvl) ->
+        let fv = setFeature f lvl empty
+        in  isRight (validateNoBothBits fv)
   ]
+
+-- | Generate a random known feature and level.
+genFeatureAndLevel :: Gen (Feature, FeatureLevel)
+genFeatureAndLevel = do
+  f <- elements knownFeatures
+  lvl <- elements [Required, Optional]
+  pure (f, lvl)
+
+-- | Generate a feature valid in Init context with a level.
+genInitFeatureAndLevel :: Gen (Feature, FeatureLevel)
+genInitFeatureAndLevel = do
+  f <- elements initFeatures
+  lvl <- elements [Required, Optional]
+  pure (f, lvl)
+  where
+    initFeatures =
+      filter validForInit knownFeatures
+    validForInit f =
+      null (featureContexts f)
+      || Init `elem` featureContexts f
 
 -- | Remove duplicates from a list.
 removeDups :: Eq a => [a] -> [a]
