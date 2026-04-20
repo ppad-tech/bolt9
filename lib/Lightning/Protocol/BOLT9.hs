@@ -99,6 +99,9 @@ module Lightning.Protocol.BOLT9 (
     -- * Known features
     -- | The BOLT #9 feature table and lookup functions.
   , Feature(..)
+  , KnownFeature(..)
+  , knownFeatureByBit
+  , knownFeatureByName
   , featureByBit
   , featureByName
   , knownFeatures
@@ -117,6 +120,7 @@ module Lightning.Protocol.BOLT9 (
     -- * Feature operations
     -- | High-level operations using 'Feature' values.
   , setFeature
+  , setFeatureWithDeps
   , hasFeature
   , isFeatureSet
   , listFeatures
@@ -126,6 +130,8 @@ module Lightning.Protocol.BOLT9 (
   , ValidationError(..)
   , validateLocal
   , validateRemote
+  , setFeatureForContext
+  , validateNoBothBits
   , highestSetBit
   , Validate.setBits
   ) where

@@ -20,6 +20,10 @@ module Lightning.Protocol.BOLT9.Validate (
     -- * Remote validation
   , validateRemote
 
+    -- * Validated construction
+  , setFeatureForContext
+  , validateNoBothBits
+
     -- * Helpers
   , highestSetBit
   , setBits
@@ -31,7 +35,8 @@ import qualified Data.ByteString as BS
 import qualified Data.Bits as B
 import Data.Word (Word16)
 import GHC.Generics (Generic)
-import Lightning.Protocol.BOLT9.Codec (isFeatureSet, testBit)
+import Lightning.Protocol.BOLT9.Codec
+  (isFeatureSet, setFeature, testBit)
 import Lightning.Protocol.BOLT9.Features
 import Lightning.Protocol.BOLT9.Types
 
@@ -143,6 +148,67 @@ parityErrors !ctx !fv = case channelParity ctx of
       in  if isEven /= wantEven
           then InvalidParity bit ctx : acc
           else acc
+
+-- Validated construction -------------------------------------------------------
+
+-- | Set a feature in a vector, validating that the feature is
+--   allowed in the given context and has correct parity.
+--
+--   Checks:
+--
+--   * The feature's context list includes the given context
+--     (or is empty, meaning all contexts are allowed)
+--   * For 'ChanAnnOdd', only 'Optional' (odd bit) is allowed
+--   * For 'ChanAnnEven', only 'Required' (even bit) is allowed
+--
+--   >>> import Data.Maybe (fromJust)
+--   >>> let pm = fromJust (featureByName "option_payment_metadata")
+--   >>> setFeatureForContext Invoice pm Optional empty
+--   Right ...
+--   >>> setFeatureForContext Init pm Optional empty
+--   Left (ContextNotAllowed "option_payment_metadata" Init)
+setFeatureForContext
+  :: Context
+  -> Feature
+  -> FeatureLevel
+  -> FeatureVector
+  -> Either ValidationError FeatureVector
+setFeatureForContext !ctx !f !level !fv
+  | not (null contexts)
+  , not (contextAllowed ctx contexts)
+  = Left (ContextNotAllowed (featureName f) ctx)
+  | otherwise
+  = case channelParity ctx of
+      Just True | level == Optional ->
+        Left (InvalidParity targetBit ctx)
+      Just False | level == Required ->
+        Left (InvalidParity targetBit ctx)
+      _ -> Right (setFeature f level fv)
+  where
+    !contexts  = featureContexts f
+    !baseBit   = featureBaseBit f
+    !targetBit = case level of
+      Required -> baseBit
+      Optional -> baseBit + 1
+
+-- | Validate that no feature has both its required and optional
+--   bits set simultaneously.
+--
+--   Returns the input vector unchanged on success.
+--
+--   >>> validateNoBothBits empty
+--   Right ...
+validateNoBothBits
+  :: FeatureVector -> Either ValidationError FeatureVector
+validateNoBothBits !fv = go knownFeatures
+  where
+    go [] = Right fv
+    go (f:fs) =
+      let !baseBit = featureBaseBit f
+      in  if   testBit baseBit fv
+            && testBit (baseBit + 1) fv
+          then Left (BothBitsSet baseBit (featureName f))
+          else go fs
 
 -- Remote validation ----------------------------------------------------------
 
