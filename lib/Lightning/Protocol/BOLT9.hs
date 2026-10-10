@@ -82,7 +82,7 @@ module Lightning.Protocol.BOLT9 (
   , channel_type_features
   ) where
 
-import Control.DeepSeq (NFData)
+import Control.DeepSeq (NFData(..))
 import qualified Data.Bits as B
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
@@ -109,7 +109,6 @@ import GHC.Generics (Generic)
 --   >>> set_bit 1 empty
 --   parse "\STX"
 newtype FeatureVector = FeatureVector ByteString
-  deriving Generic
 
 instance Eq FeatureVector where
   FeatureVector a == FeatureVector b = strip a == strip b
@@ -118,7 +117,8 @@ instance Show FeatureVector where
   showsPrec d (FeatureVector bs) = showParen (d > 10) $
     showString "parse " . showsPrec 11 bs
 
-instance NFData FeatureVector
+instance NFData FeatureVector where
+  rnf (FeatureVector bs) = rnf bs
 
 -- | Parse a feature vector from its wire bytes. Every byte string is a
 --   valid feature vector.
@@ -558,7 +558,9 @@ instance NFData ValidationError
 --   * each set feature's dependencies are set. A dependency on an
 --     ASSUMED feature counts as met even when its bits are clear.
 --
---   Errors are reported in that order.
+--   Errors are reported in that order. No known feature is presented
+--   in 'ChannelContext' or 'BlindedContext', so only the empty vector
+--   passes there (as BOLT #4 requires of @allowed_features@).
 --
 --   >>> validate_local InitContext (set_feature OptionZeroconf Optional empty)
 --   Left (MissingDependency OptionZeroconf OptionScidAlias :| [])
