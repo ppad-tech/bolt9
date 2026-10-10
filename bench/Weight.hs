@@ -1,21 +1,18 @@
 module Main where
 
-import Weigh
 import qualified Lightning.Protocol.BOLT9 as B9
+import Weigh
 import Fixtures
 
 main :: IO ()
 main = mainWith $ do
-  func "FeatureVector (5 features)" mkFiveFeatures ()
-  func "validateLocal" (B9.validateLocal B9.Init) validFV
-  func "listFeatures" B9.listFeatures validFV
-
--- | Create a FeatureVector with 5 features set.
-mkFiveFeatures :: () -> B9.FeatureVector
-mkFiveFeatures _ =
-    B9.setBit 15   -- payment_secret
-  $ B9.setBit 17   -- basic_mpp
-  $ B9.setBit 23   -- option_anchors
-  $ B9.setBit 25   -- option_route_blinding
-  $ B9.setBit 27   -- option_shutdown_anysegwit
-  $ B9.empty
+  func "union" (B9.union typical) large
+  func "set_feature" (B9.set_feature B9.OptionSplice B9.Optional) typical
+  func "set_feature_with_deps"
+    (B9.set_feature_with_deps B9.OptionZeroconf B9.Optional) B9.empty
+  func "list_features" B9.list_features typical
+  func "validate_local (init)" (B9.validate_local B9.InitContext) typical
+  func "validate_remote (init)" (B9.validate_remote B9.InitContext) typical
+  func "validate_remote (init, 64 bytes)"
+    (B9.validate_remote B9.InitContext) large
+  func "channel_type" B9.channel_type zeroconf_type_features
