@@ -1,6 +1,6 @@
 # Changelog
 
-- 0.1.0 (UNRELEASED)
+- 0.1.0 (2026-10-10)
   * Breaking: the API is redesigned and now lives entirely in
     Lightning.Protocol.BOLT9, with snake_case names. The submodules,
     the bit-index newtypes, the name-based feature lookups and the
