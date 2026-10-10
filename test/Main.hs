@@ -25,6 +25,7 @@ tests = testGroup "ppad-bolt9" [
   , setFeatureWithDepsTests
   , setFeatureForContextTests
   , validateNoBothBitsTests
+  , remoteDependencyTests
   , propertyTests
   ]
 
@@ -415,6 +416,32 @@ validateNoBothBitsTests = testGroup "validateNoBothBits" [
       let fv = setBit 15 (setBit 14
              (setBit 17 (setBit 16 empty)))
       isLeft (validateNoBothBits fv) @?= True
+  ]
+
+-- Remote dependency tests -----------------------------------------------------
+
+remoteDependencyTests :: TestTree
+remoteDependencyTests = testGroup "validateRemote dependencies" [
+    testCase "rejects option_zeroconf without option_scid_alias" $
+      validateRemote Init (setBit 51 empty) @?=
+        Left [MissingDependency "option_zeroconf" "option_scid_alias"]
+
+  , testCase "rejects basic_mpp without payment_secret (init)" $
+      validateRemote Init (setBit 17 empty) @?=
+        Left [MissingDependency "basic_mpp" "payment_secret"]
+
+  , testCase "rejects basic_mpp without payment_secret (invoice)" $
+      validateRemote Invoice (setBit 17 empty) @?=
+        Left [MissingDependency "basic_mpp" "payment_secret"]
+
+  , testCase "rejects option_simple_close without anysegwit" $
+      validateRemote Init (setBit 60 empty) @?=
+        Left [ MissingDependency
+                 "option_simple_close" "option_shutdown_anysegwit" ]
+
+  , testCase "accepts features with dependencies set" $ do
+      validateRemote Init (setBit 51 (setBit 47 empty)) @?= Right ()
+      validateRemote Invoice (setBit 17 (setBit 14 empty)) @?= Right ()
   ]
 
 isInvalidParity :: ValidationError -> Bool
