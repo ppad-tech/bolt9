@@ -27,6 +27,7 @@ tests = testGroup "ppad-bolt9" [
   , validateNoBothBitsTests
   , remoteDependencyTests
   , longVectorTests
+  , oppositeBitTests
   , propertyTests
   ]
 
@@ -476,6 +477,62 @@ longVectorTests = testGroup "Long vectors" [
   , testCase "max-length vector, top even bit rejected" $
       validateRemote Init (longVector 65534 0x40) @?=
         Left [UnknownRequiredBit 524278]
+  ]
+
+-- Opposite bit tests ----------------------------------------------------------
+
+-- | Look up a known feature by name, failing the test if absent.
+knownFeature :: String -> IO Feature
+knownFeature n = case featureByName n of
+  Nothing -> assertFailure ("feature not found: " ++ n)
+  Just f  -> pure f
+
+oppositeBitTests :: TestTree
+oppositeBitTests = testGroup "Opposite bit" [
+    testCase "setFeature Optional clears the required bit" $ do
+      ps <- knownFeature "payment_secret"
+      let fv = setFeature ps Optional (setFeature ps Required empty)
+      setBits fv @?= [15]
+      hasFeature ps fv @?= Just Optional
+
+  , testCase "setFeature Required clears the optional bit" $ do
+      ps <- knownFeature "payment_secret"
+      let fv = setFeature ps Required (setBit 15 empty)
+      setBits fv @?= [14]
+      hasFeature ps fv @?= Just Required
+
+  , testCase "setFeatureWithDeps keeps a set dependency's level" $ do
+      ps  <- knownFeature "payment_secret"
+      mpp <- knownFeature "basic_mpp"
+      let fv = setFeatureWithDeps mpp Optional
+                 (setFeature ps Required empty)
+      hasFeature ps fv @?= Just Required
+      hasFeature mpp fv @?= Just Optional
+      validateLocal Init fv @?= Right ()
+
+  , testCase "setFeatureForContext clears the opposite bit" $ do
+      anc <- knownFeature "option_anchors"
+      let start = setFeature anc Required empty
+      case setFeatureForContext Init anc Optional start of
+        Left e   -> assertFailure (show e)
+        Right fv -> do
+          hasFeature anc fv @?= Just Optional
+          validateNoBothBits fv @?= Right fv
+
+  , testProperty "setFeature never sets both bits (any start)" $
+      forAll genFeatureAndLevel $ \(f, lvl) bs ->
+        let fv = setFeature f lvl (parse (BS.pack bs))
+            b  = featureBaseBit f
+        in  not (testBit b fv && testBit (b + 1) fv)
+              && hasFeature f fv == Just lvl
+
+  , testProperty "setFeature leaves other bits alone" $
+      forAll genFeatureAndLevel $ \(f, lvl) bs ->
+        let fv0   = parse (BS.pack bs)
+            fv    = setFeature f lvl fv0
+            b     = fromIntegral (featureBaseBit f)
+            other = filter (\i -> i /= b && i /= b + 1)
+        in  other (setBits fv) === other (setBits fv0)
   ]
 
 isInvalidParity :: ValidationError -> Bool
