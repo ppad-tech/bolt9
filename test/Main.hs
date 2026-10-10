@@ -21,6 +21,7 @@ main = defaultMain $ testGroup "ppad-bolt9" [
   , local_tests
   , remote_tests
   , invoice_tests
+  , blinded_tests
   , channel_type_tests
   , properties
   ]
@@ -405,6 +406,22 @@ invoice_tests = testGroup "BOLT #11 invoice features" [
       [8, 14, 99, 100] (Left (UnknownBit 100 :| []))
   , testCase "a writer may set 8, 14 and 48" $
       validate_local InvoiceContext (bits [8, 14, 48]) @?= Right ()
+  ]
+
+-- BOLT #4 vectors -----------------------------------------------------------
+
+-- | allowed_features from bolt04/route-blinding-test.json.
+blinded_tests :: TestTree
+blinded_tests = testGroup "BOLT #4 allowed_features" [
+    testCase "features [] (Bob, Carol, Dave)" $ do
+      set_bits (parse "") @?= []
+      validate_remote BlindedContext (parse "") @?= Right ()
+
+  , testCase "features [113] (Eve)" $ do
+      let fv = parse (BS.pack (0x02 : replicate 14 0))
+      set_bits fv @?= [113]
+      validate_remote BlindedContext fv @?= Left (UnknownBit 113 :| [])
+      validate_local BlindedContext fv @?= Left (UnknownBit 113 :| [])
   ]
 
 -- channel types -------------------------------------------------------------
