@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               ppad-bolt9
-version:            0.0.1
+version:            0.1.0
 synopsis:           Feature flags per BOLT #9
 license:            MIT
 license-file:       LICENSE
@@ -8,11 +8,15 @@ author:             Jared Tobin
 maintainer:         jared@ppad.tech
 category:           Cryptography
 build-type:         Simple
-tested-with:        GHC == 9.10.3
+tested-with:        GHC == { 9.10.3 }
 extra-doc-files:    CHANGELOG
 description:
-  Feature flags, per
+  Lightning Network feature flags, per
   [BOLT #9](https://github.com/lightning/bolts/blob/master/09-features.md).
+  Provides an abstract feature vector type that preserves its wire
+  bytes, the table of known features with their contexts and
+  dependencies, sender- and receiver-side validation for each context,
+  and BOLT #2 channel types.
 
 source-repository head
   type:     git
@@ -25,14 +29,9 @@ library
       -Wall
   exposed-modules:
       Lightning.Protocol.BOLT9
-      Lightning.Protocol.BOLT9.Codec
-      Lightning.Protocol.BOLT9.Features
-      Lightning.Protocol.BOLT9.Types
-      Lightning.Protocol.BOLT9.Validate
   build-depends:
       base >= 4.9 && < 5
     , bytestring >= 0.9 && < 0.13
-    , containers >= 0.6 && < 0.9
     , deepseq >= 1.4 && < 1.6
 
 test-suite bolt9-tests
@@ -42,7 +41,7 @@ test-suite bolt9-tests
   main-is:             Main.hs
 
   ghc-options:
-    -rtsopts -Wall -O2
+    -rtsopts -Wall
 
   build-depends:
       base
@@ -60,7 +59,7 @@ benchmark bolt9-bench
   other-modules:       Fixtures
 
   ghc-options:
-    -rtsopts -O2 -Wall -fno-warn-orphans
+    -rtsopts -O2 -Wall
 
   build-depends:
       base
@@ -77,7 +76,7 @@ benchmark bolt9-weigh
   other-modules:       Fixtures
 
   ghc-options:
-    -rtsopts -O2 -Wall -fno-warn-orphans
+    -rtsopts -O2 -Wall
 
   build-depends:
       base

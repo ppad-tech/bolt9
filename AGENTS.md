@@ -139,5 +139,4 @@ When planning work:
 The flake.nix follows ppad conventions:
 - Uses ppad-nixpkgs as base
 - Follows references to avoid duplication
-- Supports LLVM backend via cabal flag
 - Provides devShell with ghc, cabal, cc, llvm
