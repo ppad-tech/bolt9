@@ -6,7 +6,7 @@ module Main where
 import qualified Data.ByteString as BS
 import Data.Either (isLeft, isRight)
 import Data.Maybe (isJust, isNothing)
-import Data.Word (Word16)
+import Data.Word (Word8, Word16)
 import Lightning.Protocol.BOLT9
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -26,6 +26,7 @@ tests = testGroup "ppad-bolt9" [
   , setFeatureForContextTests
   , validateNoBothBitsTests
   , remoteDependencyTests
+  , longVectorTests
   , propertyTests
   ]
 
@@ -444,6 +445,39 @@ remoteDependencyTests = testGroup "validateRemote dependencies" [
       validateRemote Invoice (setBit 17 (setBit 14 empty)) @?= Right ()
   ]
 
+-- Long vector tests -----------------------------------------------------------
+
+-- | A vector of (n + 1) bytes whose most significant byte is b.
+longVector :: Int -> Word8 -> FeatureVector
+longVector n b = parse (BS.cons b (BS.replicate n 0))
+
+longVectorTests :: TestTree
+longVectorTests = testGroup "Long vectors" [
+    testCase "bit 65536 is reported without wrapping" $ do
+      let fv = longVector 8192 0x01
+      setBits fv @?= [65536]
+      highestSetBit fv @?= Just 65536
+      validateRemote Init fv @?= Left [UnknownRequiredBit 65536]
+
+  , testCase "bit 65538 is reported as itself" $
+      validateRemote Init (longVector 8192 0x04) @?=
+        Left [UnknownRequiredBit 65538]
+
+  , testCase "bit 65552 does not alias basic_mpp" $
+      validateRemote Init (longVector 8194 0x01) @?=
+        Left [UnknownRequiredBit 65552]
+
+  , testCase "max-length vector, top odd bit accepted" $ do
+      let fv = longVector 65534 0x80
+      setBits fv @?= [524279]
+      highestSetBit fv @?= Just 524279
+      validateRemote Init fv @?= Right ()
+
+  , testCase "max-length vector, top even bit rejected" $
+      validateRemote Init (longVector 65534 0x40) @?=
+        Left [UnknownRequiredBit 524278]
+  ]
+
 isInvalidParity :: ValidationError -> Bool
 isInvalidParity (InvalidParity _ _) = True
 isInvalidParity _ = False
@@ -488,7 +522,8 @@ propertyTests = testGroup "Properties" [
   , testProperty "member consistent with setBits" $
       \bs -> let fv   = parse (BS.pack bs)
                  bits = setBits fv
-             in  all (\b -> member (bitIndex b) fv) bits === True
+             in  all (\b -> member (bitIndex (fromIntegral b)) fv) bits
+                   === True
 
   , testProperty "requiredBit only succeeds for even" $
       \(n :: Word16) -> isJust (requiredBit n) === (n `mod` 2 == 0)
