@@ -220,6 +220,7 @@ validateNoBothBits !fv = go knownFeatures
 --   * Unknown even (required) bits are errors
 --   * If both bits of a pair are set, treat as required (not an error)
 --   * Context restrictions still apply for known features
+--   * All dependencies of set features are also set
 --
 --   >>> import Lightning.Protocol.BOLT9.Codec (setBit)
 --   >>> validateRemote Init (setBit 999 empty)  -- unknown odd bit: ok
@@ -230,6 +231,7 @@ validateRemote :: Context -> FeatureVector -> Either [ValidationError] ()
 validateRemote !ctx !fv =
   let errs = unknownRequiredErrors fv
           ++ contextErrors ctx fv
+          ++ dependencyErrors fv
           ++ parityErrors ctx fv
   in  if null errs
       then Right ()
