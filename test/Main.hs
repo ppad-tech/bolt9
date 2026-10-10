@@ -6,7 +6,7 @@ module Main where
 import qualified Data.ByteString as BS
 import Data.Either (isLeft, isRight)
 import Data.Maybe (isJust, isNothing)
-import Data.Word (Word16)
+import Data.Word (Word8, Word16)
 import Lightning.Protocol.BOLT9
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -25,6 +25,9 @@ tests = testGroup "ppad-bolt9" [
   , setFeatureWithDepsTests
   , setFeatureForContextTests
   , validateNoBothBitsTests
+  , remoteDependencyTests
+  , longVectorTests
+  , oppositeBitTests
   , propertyTests
   ]
 
@@ -417,6 +420,121 @@ validateNoBothBitsTests = testGroup "validateNoBothBits" [
       isLeft (validateNoBothBits fv) @?= True
   ]
 
+-- Remote dependency tests -----------------------------------------------------
+
+remoteDependencyTests :: TestTree
+remoteDependencyTests = testGroup "validateRemote dependencies" [
+    testCase "rejects option_zeroconf without option_scid_alias" $
+      validateRemote Init (setBit 51 empty) @?=
+        Left [MissingDependency "option_zeroconf" "option_scid_alias"]
+
+  , testCase "rejects basic_mpp without payment_secret (init)" $
+      validateRemote Init (setBit 17 empty) @?=
+        Left [MissingDependency "basic_mpp" "payment_secret"]
+
+  , testCase "rejects basic_mpp without payment_secret (invoice)" $
+      validateRemote Invoice (setBit 17 empty) @?=
+        Left [MissingDependency "basic_mpp" "payment_secret"]
+
+  , testCase "rejects option_simple_close without anysegwit" $
+      validateRemote Init (setBit 60 empty) @?=
+        Left [ MissingDependency
+                 "option_simple_close" "option_shutdown_anysegwit" ]
+
+  , testCase "accepts features with dependencies set" $ do
+      validateRemote Init (setBit 51 (setBit 47 empty)) @?= Right ()
+      validateRemote Invoice (setBit 17 (setBit 14 empty)) @?= Right ()
+  ]
+
+-- Long vector tests -----------------------------------------------------------
+
+-- | A vector of (n + 1) bytes whose most significant byte is b.
+longVector :: Int -> Word8 -> FeatureVector
+longVector n b = parse (BS.cons b (BS.replicate n 0))
+
+longVectorTests :: TestTree
+longVectorTests = testGroup "Long vectors" [
+    testCase "bit 65536 is reported without wrapping" $ do
+      let fv = longVector 8192 0x01
+      setBits fv @?= [65536]
+      highestSetBit fv @?= Just 65536
+      validateRemote Init fv @?= Left [UnknownRequiredBit 65536]
+
+  , testCase "bit 65538 is reported as itself" $
+      validateRemote Init (longVector 8192 0x04) @?=
+        Left [UnknownRequiredBit 65538]
+
+  , testCase "bit 65552 does not alias basic_mpp" $
+      validateRemote Init (longVector 8194 0x01) @?=
+        Left [UnknownRequiredBit 65552]
+
+  , testCase "max-length vector, top odd bit accepted" $ do
+      let fv = longVector 65534 0x80
+      setBits fv @?= [524279]
+      highestSetBit fv @?= Just 524279
+      validateRemote Init fv @?= Right ()
+
+  , testCase "max-length vector, top even bit rejected" $
+      validateRemote Init (longVector 65534 0x40) @?=
+        Left [UnknownRequiredBit 524278]
+  ]
+
+-- Opposite bit tests ----------------------------------------------------------
+
+-- | Look up a known feature by name, failing the test if absent.
+knownFeature :: String -> IO Feature
+knownFeature n = case featureByName n of
+  Nothing -> assertFailure ("feature not found: " ++ n)
+  Just f  -> pure f
+
+oppositeBitTests :: TestTree
+oppositeBitTests = testGroup "Opposite bit" [
+    testCase "setFeature Optional clears the required bit" $ do
+      ps <- knownFeature "payment_secret"
+      let fv = setFeature ps Optional (setFeature ps Required empty)
+      setBits fv @?= [15]
+      hasFeature ps fv @?= Just Optional
+
+  , testCase "setFeature Required clears the optional bit" $ do
+      ps <- knownFeature "payment_secret"
+      let fv = setFeature ps Required (setBit 15 empty)
+      setBits fv @?= [14]
+      hasFeature ps fv @?= Just Required
+
+  , testCase "setFeatureWithDeps keeps a set dependency's level" $ do
+      ps  <- knownFeature "payment_secret"
+      mpp <- knownFeature "basic_mpp"
+      let fv = setFeatureWithDeps mpp Optional
+                 (setFeature ps Required empty)
+      hasFeature ps fv @?= Just Required
+      hasFeature mpp fv @?= Just Optional
+      validateLocal Init fv @?= Right ()
+
+  , testCase "setFeatureForContext clears the opposite bit" $ do
+      anc <- knownFeature "option_anchors"
+      let start = setFeature anc Required empty
+      case setFeatureForContext Init anc Optional start of
+        Left e   -> assertFailure (show e)
+        Right fv -> do
+          hasFeature anc fv @?= Just Optional
+          validateNoBothBits fv @?= Right fv
+
+  , testProperty "setFeature never sets both bits (any start)" $
+      forAll genFeatureAndLevel $ \(f, lvl) bs ->
+        let fv = setFeature f lvl (parse (BS.pack bs))
+            b  = featureBaseBit f
+        in  not (testBit b fv && testBit (b + 1) fv)
+              && hasFeature f fv == Just lvl
+
+  , testProperty "setFeature leaves other bits alone" $
+      forAll genFeatureAndLevel $ \(f, lvl) bs ->
+        let fv0   = parse (BS.pack bs)
+            fv    = setFeature f lvl fv0
+            b     = fromIntegral (featureBaseBit f)
+            other = filter (\i -> i /= b && i /= b + 1)
+        in  other (setBits fv) === other (setBits fv0)
+  ]
+
 isInvalidParity :: ValidationError -> Bool
 isInvalidParity (InvalidParity _ _) = True
 isInvalidParity _ = False
@@ -461,7 +579,8 @@ propertyTests = testGroup "Properties" [
   , testProperty "member consistent with setBits" $
       \bs -> let fv   = parse (BS.pack bs)
                  bits = setBits fv
-             in  all (\b -> member (bitIndex b) fv) bits === True
+             in  all (\b -> member (bitIndex (fromIntegral b)) fv) bits
+                   === True
 
   , testProperty "requiredBit only succeeds for even" $
       \(n :: Word16) -> isJust (requiredBit n) === (n `mod` 2 == 0)
