@@ -89,7 +89,8 @@ testBit !idx = member (bitIndex idx)
 
 -- | Set a feature's bit at the given level.
 --
---   'Required' sets the even bit, 'Optional' sets the odd bit.
+--   'Required' sets the even bit, 'Optional' sets the odd bit. The
+--   other bit of the pair is cleared, so both are never set.
 --
 --   >>> import Data.Maybe (fromJust)
 --   >>> let mpp = fromJust (featureByName "basic_mpp")
@@ -98,17 +99,17 @@ testBit !idx = member (bitIndex idx)
 --   >>> setFeature mpp Required empty  -- set required bit (16)
 --   FeatureVector {unFeatureVector = "\SOH"}
 setFeature :: Feature -> FeatureLevel -> FeatureVector -> FeatureVector
-setFeature !f !level = setBit targetBit
+setFeature !f !level = case level of
+    Required -> setBit baseBit . clearBit (baseBit + 1)
+    Optional -> setBit (baseBit + 1) . clearBit baseBit
   where
-    !baseBit   = featureBaseBit f
-    !targetBit = case level of
-      Required -> baseBit
-      Optional -> baseBit + 1
+    !baseBit = featureBaseBit f
 {-# INLINE setFeature #-}
 
 -- | Set a feature and all its transitive dependencies.
 --
---   Dependencies are set at the same level as the feature itself.
+--   Dependencies that are not yet set are set at the same level as
+--   the feature itself; dependencies already set keep their level.
 --   Unknown dependencies (not in the known features table) are
 --   silently skipped.
 --
@@ -128,7 +129,11 @@ setFeatureWithDeps !f !level !fv =
   where
     setDep !depName !acc = case featureByName depName of
       Nothing  -> acc
-      Just dep -> setFeatureWithDeps dep level acc
+      Just dep
+        | isFeatureSet dep acc ->
+            foldr setDep acc (featureDependencies dep)
+        | otherwise ->
+            setFeatureWithDeps dep level acc
 
 -- | Check if a feature is set in the vector.
 --
