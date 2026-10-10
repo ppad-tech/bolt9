@@ -51,10 +51,10 @@ data ValidationError
   | ContextNotAllowed !String !Context
     -- ^ A feature is not allowed in the given context.
     --   Arguments: feature name, context.
-  | UnknownRequiredBit {-# UNPACK #-} !Word16
+  | UnknownRequiredBit {-# UNPACK #-} !Int
     -- ^ An unknown required (even) bit is set (remote validation only).
     --   Argument: bit index.
-  | InvalidParity {-# UNPACK #-} !Word16 !Context
+  | InvalidParity {-# UNPACK #-} !Int !Context
     -- ^ A bit has invalid parity for a channel context.
     --   Arguments: bit index, context (ChanAnnOdd or ChanAnnEven).
   deriving (Eq, Show, Generic)
@@ -180,9 +180,9 @@ setFeatureForContext !ctx !f !level !fv
   | otherwise
   = case channelParity ctx of
       Just True | level == Optional ->
-        Left (InvalidParity targetBit ctx)
+        Left (InvalidParity (fromIntegral targetBit) ctx)
       Just False | level == Required ->
-        Left (InvalidParity targetBit ctx)
+        Left (InvalidParity (fromIntegral targetBit) ctx)
       _ -> Right (setFeature f level fv)
   where
     !contexts  = featureContexts f
@@ -243,7 +243,9 @@ unknownRequiredErrors !fv = foldr check [] (setBits fv)
   where
     check !bit !acc
       | bit `mod` 2 == 1 = acc  -- odd bit, optional, ignore
-      | otherwise = case featureByBit bit of
+      | bit > fromIntegral (maxBound :: Word16) =
+          UnknownRequiredBit bit : acc
+      | otherwise = case featureByBit (fromIntegral bit) of
           Just _  -> acc  -- known feature
           Nothing -> UnknownRequiredBit bit : acc
 
@@ -252,7 +254,7 @@ unknownRequiredErrors !fv = foldr check [] (setBits fv)
 -- | Find the highest set bit in a feature vector.
 --
 --   Returns 'Nothing' if the vector is empty or has no bits set.
-highestSetBit :: FeatureVector -> Maybe Word16
+highestSetBit :: FeatureVector -> Maybe Int
 highestSetBit !fv =
   let !bs = unFeatureVector fv
   in  if BS.null bs
@@ -260,7 +262,7 @@ highestSetBit !fv =
       else findHighestBit bs
 
 -- | Find the highest set bit in a non-empty ByteString.
-findHighestBit :: ByteString -> Maybe Word16
+findHighestBit :: ByteString -> Maybe Int
 findHighestBit !bs = go 0
   where
     !len = BS.length bs
@@ -274,33 +276,33 @@ findHighestBit !bs = go 0
               else
                 let !bytePos = len - 1 - i
                     !highBit = 7 - B.countLeadingZeros byte
-                    !bitIdx  = fromIntegral bytePos * 8 + fromIntegral highBit
+                    !bitIdx  = bytePos * 8 + highBit
                 in  Just bitIdx
 
 -- | Collect all set bits in a feature vector.
 --
 --   Returns a list of bit indices in ascending order.
-setBits :: FeatureVector -> [Word16]
+setBits :: FeatureVector -> [Int]
 setBits !fv =
   let !bs  = unFeatureVector fv
       !len = BS.length bs
   in  collectBits bs len 0 []
 
 -- | Collect bits from a ByteString into a list.
-collectBits :: ByteString -> Int -> Int -> [Word16] -> [Word16]
+collectBits :: ByteString -> Int -> Int -> [Int] -> [Int]
 collectBits !bs !len !i !acc
   | i >= len  = acc
   | otherwise =
       let !byte    = BS.index bs (len - 1 - i)
-          !baseIdx = fromIntegral i * 8
+          !baseIdx = i * 8
           !acc'    = collectByteBits byte baseIdx acc
       in  collectBits bs len (i + 1) acc'
 
 -- | Collect set bits from a single byte.
-collectByteBits :: B.Bits a => a -> Word16 -> [Word16] -> [Word16]
+collectByteBits :: B.Bits a => a -> Int -> [Int] -> [Int]
 collectByteBits !byte !baseIdx = go 7
   where
     go !bit !acc
       | bit < 0        = acc
-      | B.testBit byte bit = go (bit - 1) ((baseIdx + fromIntegral bit) : acc)
+      | B.testBit byte bit = go (bit - 1) ((baseIdx + bit) : acc)
       | otherwise          = go (bit - 1) acc
